@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>CSV Data Processing</title>
+  </head>
+  <body>
+    <h1>CSV Data Processing</h1>
+    <input type="file" id="csvFileInput" />
+    <div id="output">
+      <style>
+        th,
+        td {
+          text-align: left;
+          word-wrap: break-word;
+          max-width: 90vw;
+        }
+      </style>
+    </div>
+
+    <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        function readCSVSegments(csv) {
+          var segments = [];
+          var currentSegment = [];
+
+          var segmentNames = [
+            "ELD File Header Segment:",
+            "User List:",
+            "CMV List:",
+            "ELD Event List:",
+            "ELD Event Annotations or Comments:",
+            "Driver's Certification/Recertification Events:",
+            "Malfunctions and Data Diagnostic Events:",
+            "ELD Login/Logout Events:",
+            "CMV's Engine Power-Up and Shut Down Events:",
+            "Unidentified Driver Profile Events:",
+            "Off-Duty Time Deferral Events:",
+            "Change in Driver's Cycle Events:",
+            "Change in Operating Zone Events:",
+            "Additional Hours not recorded Events:",
+            "End of File:",
+          ];
+          var segmentName = null;
+
+          var lines = csv.split(/\r?\n|\r/); // Split by \n or \r
+          // console.log("Lines: " + lines);
+          // console.log(lines.length);
+          for (var i = 0; i < lines.length; i++) {
+            var row = lines[i].split(",");
+            if (row.length > 0 && segmentNames.includes(row[0])) {
+              if (currentSegment.length > 0) {
+                segments.push(currentSegment); // Add the previous segment to the list
+              }
+              currentSegment = [row]; // Start a new segment with the current row
+              segmentName = row[0];
+            } else if (segmentName) {
+              // Read all columns
+              currentSegment.push(row);
+            }
+          }
+
+          if (currentSegment.length > 0) {
+            segments.push(currentSegment); // Add the last segment to the list
+          }
+
+          return segments;
+        }
+
+        function processSegments(segments) {
+          var allLineDataCheck = [];
+
+          for (var i = 0; i < segments.length; i++) {
+            var segment = segments[i];
+            var segmentNameRow = segment[0];
+            var segmentName = segmentNameRow[0];
+            var segmentData = segment.slice(1); // Exclude the segment name row
+            var rowCount = segmentData.length;
+            var lineDataCheckValues = [];
+
+            for (var j = 0; j < segmentData.length; j++) {
+              var row = segmentData[j];
+              var columnsExceptLast = row.slice(0, -1);
+              var lowestTwoBytes = calculateDataCheck(columnsExceptLast);
+              calculateLineDataCheck(lowestTwoBytes, lineDataCheckValues);
+            }
+
+            allLineDataCheck.push(lineDataCheckValues);
+          }
+
+          return allLineDataCheck;
+        }
+
+        function calculateDataCheck(rows) {
+          var asciiValue = 0;
+
+          for (var i = 0; i < rows.length; i++) {
+            var column = rows[i];
+
+            for (var j = 0; j < column.length; j++) {
+              var character = column[j];
+              var charDec = character.charCodeAt(0); // Get the decimal value of the character
+
+              if (
+                (65 <= charDec && charDec <= 90) ||
+                (48 <= charDec && charDec <= 57) ||
+                (97 <= charDec && charDec <= 122)
+              ) {
+                var subtractedCharDec = charDec - 48;
+                asciiValue += subtractedCharDec;
+              } else {
+                asciiValue += 0;
+              }
+            }
+          }
+
+          var binaryValue = asciiValue.toString(2); // Convert decimal to binary string
+
+          var lowestTwoBytes = binaryValue.slice(-16).padStart(16, "0"); // Lowest 16 digits only. If under 16, pad with 0
+          return lowestTwoBytes;
+        }
+
+        function calculateLineDataCheck(lowestTwoBytes, lineDataCheckValues) {
+          var lowestByte = lowestTwoBytes.slice(-8);
+          var circularShift = lowestByte.slice(3) + lowestByte.slice(0, 3);
+          var decValue = parseInt(circularShift, 2); // Convert the Binary circular shift to Decimal Value
+          var xorValue = decValue ^ 150; // Perform XOR operation for Line Data Check
+          var lineDataCheckValue = xorValue
+            .toString(16)
+            .toUpperCase()
+            .padStart(2, "0"); // Convert to hexadecimal and pad with 0 if needed
+          lineDataCheckValues.push(lineDataCheckValue);
+        }
+
+        function calculateFileDataCheck(flatAllLineDataCheck) {
+          var lowestTwoBytes = flatAllLineDataCheck.map(function (item) {
+            return parseInt(item, 16);
+          });
+
+          lowestTwoBytes = lowestTwoBytes.reduce(function (
+            accumulator,
+            currentValue
+          ) {
+            return accumulator + currentValue;
+          });
+
+          lowestTwoBytes = lowestTwoBytes.toString(2);
+          lowestTwoBytes = lowestTwoBytes.slice(-16).padStart(16, "0");
+
+          var lowestTwoBytesFirst = lowestTwoBytes.slice(0, -8);
+          lowestTwoBytesFirst =
+            lowestTwoBytesFirst.slice(3) + lowestTwoBytesFirst.slice(0, 3);
+
+          var lowestTwoBytesSecond = lowestTwoBytes.slice(-8);
+          lowestTwoBytesSecond =
+            lowestTwoBytesSecond.slice(3) + lowestTwoBytesSecond.slice(0, 3);
+
+          var twoBytes = lowestTwoBytesFirst + lowestTwoBytesSecond;
+          var decValue = parseInt(twoBytes, 2);
+          var xorValue = decValue ^ 38556;
+
+          var fileDataCheckValue = xorValue
+            .toString(16)
+            .toUpperCase()
+            .padStart(4, "0");
+          return fileDataCheckValue;
+        }
+
+        function calculateEventDataCheck(
+          eldEventListArray,
+          cmvListArray,
+          eldFileHeader
+        ) {
+          var eventDataCheckValues = [];
+          for (var i = 1; i < eldEventListArray.length; i++) {
+            var event = eldEventListArray[i];
+            var event_data_check_value = [
+              event[3],
+              event[4],
+              event[5],
+              event[6],
+              event[7],
+              event[8],
+              event[10],
+              event[11],
+            ];
+            for (var j = 1; j < cmvListArray.length; j++) {
+              var cmv_row = cmvListArray[j];
+              if (event[13] === cmv_row[0]) {
+                event_data_check_value.push(cmv_row[1]);
+              }
+            }
+            event_data_check_value.push(eldFileHeader[1][2]);
+            eventDataCheckValues.push(event_data_check_value);
+          }
+
+          var event_data_check_values1 = [];
+          for (var k = 0; k < eventDataCheckValues.length; k++) {
+            var event1 = eventDataCheckValues[k];
+            var lowest_byte = calculateDataCheck(event1);
+            lowest_byte = lowest_byte.slice(-8);
+            var circular_shift = lowest_byte.slice(3) + lowest_byte.slice(0, 3);
+            var dec_value = parseInt(circular_shift, 2);
+            var xor_value = dec_value ^ 195;
+            var event_data_check = xor_value
+              .toString(16)
+              .toUpperCase()
+              .padStart(2, "0");
+            event_data_check_values1.push(event_data_check);
+          }
+          return event_data_check_values1;
+        }
+
+        function displayDataChecks(
+          segments,
+          lineDataChecks,
+          eventDataCheckValues,
+          fileDataCheck
+        ) {
+          var outputDiv = document.getElementById("output");
+
+          // Create a table to show the segments and data checks
+          var table = document.createElement("table");
+          table.border = "1";
+          table.style.borderCollapse = "collapse";
+
+          for (var i = 0; i < segments.length - 1; i++) {
+            var segment = segments[i];
+            var title = segment[0][0];
+            var sub_array1 = segment.slice(1);
+            var sub_array2 = lineDataChecks[i];
+
+            var trTitle = document.createElement("tr");
+            var thTitle = document.createElement("th");
+            thTitle.textContent = title;
+            thTitle.colSpan = 3;
+            trTitle.appendChild(thTitle);
+            table.appendChild(trTitle);
+
+            for (var j = 0; j < sub_array1.length; j++) {
+              var row1 = sub_array1[j];
+              var row2 = sub_array2[j];
+              var tr = document.createElement("tr");
+
+              var tdRow1 = document.createElement("td");
+              tdRow1.textContent = row1.join(", ");
+              tr.appendChild(tdRow1);
+
+              if (title === "ELD Event List:") {
+                if (row1[row1.length - 2] !== eventDataCheckValues[j]) {
+                  tdRow1.style.color = "red"; // Set the text color to red
+                }
+
+                var tdEventDataCheck = document.createElement("td");
+                tdEventDataCheck.textContent = eventDataCheckValues[j];
+                tr.appendChild(tdEventDataCheck);
+              }
+
+              if (row1[row1.length - 1] !== row2) {
+                tdRow1.style.color = "red";
+              }
+
+              var tdLineDataCheck = document.createElement("td");
+              tdLineDataCheck.textContent = row2;
+              tr.appendChild(tdLineDataCheck);
+
+              table.appendChild(tr);
+            }
+          }
+
+          // Add the table to the outputDiv
+          outputDiv.appendChild(table);
+        }
+
+        function processCSV(file) {
+          var reader = new FileReader();
+
+          reader.onload = function (e) {
+            var csv = e.target.result;
+            var segments = readCSVSegments(csv);
+            var lineDataChecks = processSegments(segments);
+            // console.log(lineDataChecks);
+            var flatAllLineDataCheck = [];
+
+            for (var sublist of lineDataChecks) {
+              for (var element of sublist) {
+                flatAllLineDataCheck.push(element);
+              }
+            }
+
+            var fileDataCheck = calculateFileDataCheck(
+              flatAllLineDataCheck.slice(0, -1)
+            );
+            var eldFileHeader = segments[0];
+            var cmvListArray = segments[2];
+            var eldEventListArray = segments[3];
+
+            var eventDataCheckValues = calculateEventDataCheck(
+              eldEventListArray,
+              cmvListArray,
+              eldFileHeader
+            );
+            displayDataChecks(
+              segments,
+              lineDataChecks,
+              eventDataCheckValues,
+              fileDataCheck
+            );
+
+            // console.log(fileDataCheck);
+            console.log(eventDataCheckValues);
+
+            // Access the segments and perform calculations
+            // Modify the code below according to your needs
+            var totalSegments = segments.length;
+
+            // Display the result in the browser
+            var outputDiv = document.getElementById("output");
+            // outputDiv.innerHTML = "Total Segments: " + totalSegments;
+          };
+
+          reader.readAsText(file);
+        }
+        document
+          .getElementById("csvFileInput")
+          .addEventListener("change", function (e) {
+            var file = e.target.files[0];
+            if (file) {
+              processCSV(file);
+            }
+          });
+      });
+    </script>
+  </body>
+</html>
