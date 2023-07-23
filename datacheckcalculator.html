@@ -1,10 +1,12 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>CSV Data Processing</title>
+    <title>CCMTA Data Transfer Datacheck</title>
   </head>
   <body>
-    <h1>CSV Data Processing</h1>
+    <h2>CCMTA Data Transfer Datacheck</h2>
+    <hr />
+    <label>Select CCMTA CSV File: </label>
     <input type="file" id="csvFileInput" />
     <div id="output">
       <style>
@@ -13,6 +15,9 @@
           text-align: left;
           word-wrap: break-word;
           max-width: 90vw;
+        }
+        table {
+          margin: 0 auto; /* Center the table horizontally */
         }
       </style>
     </div>
@@ -66,18 +71,18 @@
           return segments;
         }
 
-        function processSegments(segments) {
+        function processSegments(segmentsExceptLast) {
           var allLineDataCheck = [];
 
-          for (var i = 0; i < segments.length; i++) {
-            var segment = segments[i];
+          for (var i = 0; i < segmentsExceptLast.length; i++) {
+            var segment = segmentsExceptLast[i];
             var segmentNameRow = segment[0];
             var segmentName = segmentNameRow[0];
             var segmentData = segment.slice(1); // Exclude the segment name row
             var rowCount = segmentData.length;
             var lineDataCheckValues = [];
 
-            for (var j = 0; j < segmentData.length; j++) {
+            for (var j = 0; j < rowCount; j++) {
               var row = segmentData[j];
               var columnsExceptLast = row.slice(0, -1);
               var lowestTwoBytes = calculateDataCheck(columnsExceptLast);
@@ -222,13 +227,15 @@
           var table = document.createElement("table");
           table.border = "1";
           table.style.borderCollapse = "collapse";
-
-          for (var i = 0; i < segments.length - 1; i++) {
+          var dataChecks = [...lineDataChecks, fileDataCheck];
+          // console.log(dataChecks);
+          for (var i = 0; i < segments.length; i++) {
             var segment = segments[i];
+            // Debugging: Check if segment is defined and has content
             var title = segment[0][0];
             var sub_array1 = segment.slice(1);
-            var sub_array2 = lineDataChecks[i];
-
+            var sub_array2 = dataChecks[i];
+            // console.log(sub_array2);
             var trTitle = document.createElement("tr");
             var thTitle = document.createElement("th");
             thTitle.textContent = title;
@@ -255,13 +262,24 @@
                 tr.appendChild(tdEventDataCheck);
               }
 
-              if (row1[row1.length - 1] !== row2) {
-                tdRow1.style.color = "red";
+              if (title === "End of File:") {
+                console.log(row1[row1.length - 1]);
+                console.log(fileDataCheck);
+                if (row1[row1.length - 1] !== fileDataCheck) {
+                  tdRow1.style.color = "red"; // Set the text color to red
+                }
+                var tdFileDataCheck = document.createElement("td");
+                tdFileDataCheck.textContent = fileDataCheck;
+                tr.appendChild(tdFileDataCheck);
+              } else {
+                // Append the original tdLineDataCheck to the table row
+                var tdLineDataCheck = document.createElement("td");
+                tdLineDataCheck.textContent = row2;
+                tr.appendChild(tdLineDataCheck);
+                if (row1[row1.length - 1] !== row2) {
+                  tdRow1.style.color = "red";
+                }
               }
-
-              var tdLineDataCheck = document.createElement("td");
-              tdLineDataCheck.textContent = row2;
-              tr.appendChild(tdLineDataCheck);
 
               table.appendChild(tr);
             }
@@ -277,7 +295,8 @@
           reader.onload = function (e) {
             var csv = e.target.result;
             var segments = readCSVSegments(csv);
-            var lineDataChecks = processSegments(segments);
+            var segmentsExceptLast = segments.slice(0, -1);
+            var lineDataChecks = processSegments(segmentsExceptLast);
             // console.log(lineDataChecks);
             var flatAllLineDataCheck = [];
 
@@ -286,10 +305,7 @@
                 flatAllLineDataCheck.push(element);
               }
             }
-
-            var fileDataCheck = calculateFileDataCheck(
-              flatAllLineDataCheck.slice(0, -1)
-            );
+            var fileDataCheck = calculateFileDataCheck(flatAllLineDataCheck);
             var eldFileHeader = segments[0];
             var cmvListArray = segments[2];
             var eldEventListArray = segments[3];
@@ -305,9 +321,7 @@
               eventDataCheckValues,
               fileDataCheck
             );
-
-            // console.log(fileDataCheck);
-            console.log(eventDataCheckValues);
+            console.log(fileDataCheck);
 
             // Access the segments and perform calculations
             // Modify the code below according to your needs
