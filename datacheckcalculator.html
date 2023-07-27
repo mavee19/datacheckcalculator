@@ -2,49 +2,79 @@
 <html>
   <head>
     <title>CCMTA Data Transfer Datacheck</title>
+    <style>
+      th,
+      td {
+        text-align: left;
+        word-wrap: break-word;
+        max-width: 90vw;
+      }
+      table {
+        margin: 0 auto; /* Center the table horizontally */
+      }
+    </style>
   </head>
   <body>
-    <h2>CCMTA Data Transfer Datacheck</h2>
+    <h2>Data Transfer Datacheck</h2>
     <hr />
-    <label>Select CCMTA CSV File: </label>
+    <!-- Radio buttons to choose between FMCSA or CCMTA (CCMTA is checked by default) -->
+    <input type="radio" name="dataFormat" id="radioFMCSA" value="FMCSA" />
+    <label for="radioFMCSA">FMCSA</label>
+    <input
+      type="radio"
+      name="dataFormat"
+      id="radioCCMTA"
+      value="CCMTA"
+      checked
+    />
+    <label for="radioCCMTA">CCMTA</label>
+    <br />
+    <br />
+    <label>Select CSV File: </label>
     <input type="file" id="csvFileInput" />
-    <div id="output">
-      <style>
-        th,
-        td {
-          text-align: left;
-          word-wrap: break-word;
-          max-width: 90vw;
-        }
-        table {
-          margin: 0 auto; /* Center the table horizontally */
-        }
-      </style>
-    </div>
-
+    <hr />
+    <div id="output" />
     <script>
       document.addEventListener("DOMContentLoaded", function () {
-        function readCSVSegments(csv) {
+        function readCSVSegments(csv, dataFormat) {
           var segments = [];
           var currentSegment = [];
 
-          var segmentNames = [
-            "ELD File Header Segment:",
-            "User List:",
-            "CMV List:",
-            "ELD Event List:",
-            "ELD Event Annotations or Comments:",
-            "Driver's Certification/Recertification Events:",
-            "Malfunctions and Data Diagnostic Events:",
-            "ELD Login/Logout Events:",
-            "CMV's Engine Power-Up and Shut Down Events:",
-            "Unidentified Driver Profile Events:",
-            "Off-Duty Time Deferral Events:",
-            "Change in Driver's Cycle Events:",
-            "Change in Operating Zone Events:",
-            "Additional Hours not recorded Events:",
-            "End of File:",
-          ];
+          var segmentNames;
+          if (dataFormat === "FMCSA") {
+            segmentNames = [
+              "ELD File Header Segment:",
+              "User List:",
+              "CMV List:",
+              "ELD Event List:",
+              "ELD Event Annotations or Comments:",
+              "Driver's Certification/Recertification Actions:",
+              "Malfunctions and Data Diagnostic Events:",
+              "ELD Login/Logout Report:",
+              "CMV Engine Power-Up and Shut Down Activity:",
+              "Unidentified Driver Profile Records:",
+              "End of File:",
+            ];
+          } else {
+            // Default to CCMTA segment names if no format is specified or if "CCMTA" is explicitly provided
+            segmentNames = [
+              "ELD File Header Segment:",
+              "User List:",
+              "CMV List:",
+              "ELD Event List:",
+              "ELD Event Annotations or Comments:",
+              "Driver's Certification/Recertification Events:",
+              "Malfunctions and Data Diagnostic Events:",
+              "ELD Login/Logout Events:",
+              "CMV's Engine Power-Up and Shut Down Events:",
+              "Unidentified Driver Profile Events:",
+              "Off-Duty Time Deferral Events:",
+              "Change in Driver's Cycle Events:",
+              "Change in Operating Zone Events:",
+              "Additional Hours not recorded Events:",
+              "End of File:",
+            ];
+          }
           var segmentName = null;
 
           var lines = csv.split(/\r?\n|\r/); // Split by \n or \r
@@ -173,21 +203,39 @@
         function calculateEventDataCheck(
           eldEventListArray,
           cmvListArray,
-          eldFileHeader
+          eldFileHeader,
+          dataFormat
         ) {
           var eventDataCheckValues = [];
           for (var i = 1; i < eldEventListArray.length; i++) {
             var event = eldEventListArray[i];
-            var event_data_check_value = [
-              event[3],
-              event[4],
-              event[5],
-              event[6],
-              event[7],
-              event[8],
-              event[10],
-              event[11],
-            ];
+            var event_data_check_value;
+            console.log(dataFormat);
+            if (dataFormat === "FMCSA") {
+              event_data_check_value = [
+                event[3] /* <Event Type> */,
+                event[4] /* <Event Code> */,
+                event[5] /* <Event Date> */,
+                event[6] /* <Event Time> */,
+                event[7] /* <Vehicle Miles> */,
+                event[8] /* <Engine Hours> */,
+                event[9] /* <Event Latitude> */,
+                event[10] /* <Event Longitude> */,
+              ];
+            } else {
+              // Default to CCMTA format if dataFormat is not explicitly "FMCSA"
+              event_data_check_value = [
+                event[3] /* <Event Type> */,
+                event[4] /* <Event Code> */,
+                event[5] /* <Event Date> */,
+                event[6] /* <Event Time> */,
+                event[7] /* <Vehicle Miles> */,
+                event[8] /* <Engine Hours> */,
+                event[10] /* <Event Latitude> */,
+                event[11] /* <Event Longitude> */,
+              ];
+            }
+
             for (var j = 1; j < cmvListArray.length; j++) {
               var cmv_row = cmvListArray[j];
               if (event[13] === cmv_row[0]) {
@@ -196,6 +244,7 @@
             }
             event_data_check_value.push(eldFileHeader[1][2]);
             eventDataCheckValues.push(event_data_check_value);
+            console.log(event_data_check_value); 
           }
 
           var event_data_check_values1 = [];
@@ -222,8 +271,9 @@
           fileDataCheck
         ) {
           var outputDiv = document.getElementById("output");
-
           // Create a table to show the segments and data checks
+          outputDiv.innerHTML = ""; // Clear the outputDiv contents
+
           var table = document.createElement("table");
           table.border = "1";
           table.style.borderCollapse = "collapse";
@@ -260,11 +310,7 @@
                 var tdEventDataCheck = document.createElement("td");
                 tdEventDataCheck.textContent = eventDataCheckValues[j];
                 tr.appendChild(tdEventDataCheck);
-              }
-
-              if (title === "End of File:") {
-                console.log(row1[row1.length - 1]);
-                console.log(fileDataCheck);
+              } if (title === "End of File:") {
                 if (row1[row1.length - 1] !== fileDataCheck) {
                   tdRow1.style.color = "red"; // Set the text color to red
                 }
@@ -294,7 +340,10 @@
 
           reader.onload = function (e) {
             var csv = e.target.result;
-            var segments = readCSVSegments(csv);
+            var dataFormat = document.querySelector(
+              'input[name="dataFormat"]:checked'
+            ).value;
+            var segments = readCSVSegments(csv, dataFormat);
             var segmentsExceptLast = segments.slice(0, -1);
             var lineDataChecks = processSegments(segmentsExceptLast);
             // console.log(lineDataChecks);
@@ -313,7 +362,8 @@
             var eventDataCheckValues = calculateEventDataCheck(
               eldEventListArray,
               cmvListArray,
-              eldFileHeader
+              eldFileHeader,
+              dataFormat
             );
             displayDataChecks(
               segments,
@@ -321,7 +371,6 @@
               eventDataCheckValues,
               fileDataCheck
             );
-            console.log(fileDataCheck);
 
             // Access the segments and perform calculations
             // Modify the code below according to your needs
