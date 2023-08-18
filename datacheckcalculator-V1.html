@@ -78,8 +78,6 @@
           var segmentName = null;
 
           var lines = csv.split(/\r?\n|\r/); // Split by \n or \r
-          // console.log("Lines: " + lines);
-          // console.log(lines.length);
           for (var i = 0; i < lines.length; i++) {
             var row = lines[i].split(",");
             if (row.length > 0 && segmentNames.includes(row[0])) {
@@ -210,7 +208,6 @@
           for (var i = 1; i < eldEventListArray.length; i++) {
             var event = eldEventListArray[i];
             var event_data_check_value;
-            console.log(dataFormat);
             if (dataFormat === "FMCSA") {
               event_data_check_value = [
                 event[3] /* <Event Type> */,
@@ -222,6 +219,8 @@
                 event[9] /* <Event Latitude> */,
                 event[10] /* <Event Longitude> */,
               ];
+
+              vehicleUsed = event[12];
             } else {
               // Default to CCMTA format if dataFormat is not explicitly "FMCSA"
               event_data_check_value = [
@@ -234,17 +233,18 @@
                 event[10] /* <Event Latitude> */,
                 event[11] /* <Event Longitude> */,
               ];
+
+              vehicleUsed = event[13];
             }
 
             for (var j = 1; j < cmvListArray.length; j++) {
               var cmv_row = cmvListArray[j];
-              if (event[13] === cmv_row[0]) {
+              if (vehicleUsed === cmv_row[0]) {
                 event_data_check_value.push(cmv_row[1]);
               }
             }
             event_data_check_value.push(eldFileHeader[1][2]);
             eventDataCheckValues.push(event_data_check_value);
-            console.log(event_data_check_value); 
           }
 
           var event_data_check_values1 = [];
@@ -278,14 +278,12 @@
           table.border = "1";
           table.style.borderCollapse = "collapse";
           var dataChecks = [...lineDataChecks, fileDataCheck];
-          // console.log(dataChecks);
           for (var i = 0; i < segments.length; i++) {
             var segment = segments[i];
             // Debugging: Check if segment is defined and has content
             var title = segment[0][0];
             var sub_array1 = segment.slice(1);
             var sub_array2 = dataChecks[i];
-            // console.log(sub_array2);
             var trTitle = document.createElement("tr");
             var thTitle = document.createElement("th");
             thTitle.textContent = title;
@@ -310,7 +308,8 @@
                 var tdEventDataCheck = document.createElement("td");
                 tdEventDataCheck.textContent = eventDataCheckValues[j];
                 tr.appendChild(tdEventDataCheck);
-              } if (title === "End of File:") {
+              }
+              if (title === "End of File:") {
                 if (row1[row1.length - 1] !== fileDataCheck) {
                   tdRow1.style.color = "red"; // Set the text color to red
                 }
@@ -346,7 +345,6 @@
             var segments = readCSVSegments(csv, dataFormat);
             var segmentsExceptLast = segments.slice(0, -1);
             var lineDataChecks = processSegments(segmentsExceptLast);
-            // console.log(lineDataChecks);
             var flatAllLineDataCheck = [];
 
             for (var sublist of lineDataChecks) {
