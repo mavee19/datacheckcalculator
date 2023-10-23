@@ -1,5 +1,5 @@
 # datacheckcalculator
 
-Vistracks Data Check Calculator
+FMCSA/CCMTA Data Check Calculator
 
-Written Javascript inside HTML for cross device usage.
+Written Javascript inside HTML for cross-device usage.
